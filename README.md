@@ -2,27 +2,28 @@
 
 A continuation of the 1944 wall chart *Business Booms & Depressions since 1775*, redrawn for the eighty years after it ended: business activity, commodity prices, federal debt, national income, stocks and bonds, with presidents, wars, recessions and booms. Built in November 2026 with Claude (Anthropic).
 
-![The finished chart](output/chart_preview.jpg)
+![The finished chart](chart_preview.jpg)
 
-**[How it was made →](https://enricoronca.github.io/Business-Booms-Depressions-1945-2025/)** · [Hi-res PDF](output/chart_original_style.pdf) · [Data workbook](data/us_stats.xlsx)
+**[How it was made →](https://enricoronca.github.io/Business-Booms-Depressions-1945-2025/)** · [Hi-res PDF](chart_original_style.pdf) · [Data workbook](us_stats_final.xlsx)
 
 ## What is in this repository
 
-| Path | What it is |
+| File | What it is |
 |---|---|
 | `chart_original_style.py` | The script that draws the whole chart from the workbook |
-| `data/` | The master Excel workbook with every series and formula |
-| `fonts/` | Oswald Bold (SIL Open Font License, see `fonts/OFL.txt`) |
-| `output/` | The finished chart as PDF (vector, for printing) and PNG |
-| `text/` | The text blocks printed under the chart |
-| `history/` | Snapshots of the chart as it developed |
+| `us_stats_final.xlsx` | The master Excel workbook with every series and formula |
+| `chart_original_style.pdf` / `.png` | The finished chart, as PDF (vector, for printing) and PNG |
+| `chart_preview.jpg` | The chart without the space underneath, for the web page |
+| `01_…09_*.jpg` | Snapshots of the chart as it developed |
+| `01_inflation_deflation_areas.md` | The first text block printed under the chart |
+| `Oswald-Bold.ttf`, `OFL.txt` | The font and its licence (SIL Open Font License) |
 | `index.html` | The "how it was made" page |
 
 ## Re-drawing the chart
 
 ```bash
 pip install -r requirements.txt
-python chart_original_style.py data/us_stats.xlsx
+python chart_original_style.py us_stats_final.xlsx
 ```
 
 The script reads the workbook by column letter (the `COLS` setting near the top) and writes `chart_original_style.pdf` and `.png`. Every visual choice — frame ratio, scales, label positions, colours, the QR code — is a named setting at the top of the script.
