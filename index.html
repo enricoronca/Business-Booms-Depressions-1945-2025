@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How the Chart Was Made</title>
+<meta name="description" content="How the 1944 chart Business Booms & Depressions was continued to 2025, with the data, the code and every stage of the work.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f6f1e4; --ink: #1a1a1a; --muted: #5b5648; --yellow: #f3e07a; --green: #3e9b5a;
+    --red: #c1272d; --rule: #1a1a1a; --card: #fffdf6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #17160f; --ink: #ece6d3; --muted: #a59f8c; --yellow: #c9b452; --green: #5fbf7a;
+      --red: #e0585d; --rule: #ece6d3; --card: #201f17;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #17160f; --ink: #ece6d3; --muted: #a59f8c; --yellow: #c9b452; --green: #5fbf7a;
+    --red: #e0585d; --rule: #ece6d3; --card: #201f17;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink);
+         font: 17px/1.6 "Source Serif 4", Georgia, serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 16px; }
+  header { border-bottom: 3px double var(--rule); padding: 40px 0 24px; text-align: center; }
+  h1, h2, h3, .num, nav a, .tag { font-family: "Oswald", "Arial Narrow", sans-serif; text-transform: uppercase; }
+  h1 { font-size: clamp(30px, 7vw, 56px); line-height: 1.05; margin: 0; letter-spacing: .02em; }
+  .bar { height: 6px; width: 220px; margin: 14px auto 10px; background:
+         linear-gradient(var(--red) 0 33%, transparent 33% 66%, var(--red) 66%); }
+  .sub { font-family: "Oswald", sans-serif; letter-spacing: .25em; font-size: 14px; color: var(--muted); margin: 0; }
+  .lede { max-width: 640px; margin: 20px auto 0; font-size: 18px; }
+  nav { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 22px; }
+  nav a { color: var(--ink); text-decoration: none; border: 2px solid var(--rule); padding: 6px 14px;
+          font-size: 15px; letter-spacing: .05em; background: var(--yellow); color: #1a1a1a; }
+  nav a:hover { filter: brightness(1.05); }
+  section { padding: 34px 0; border-bottom: 1px solid var(--muted); }
+  h2 { font-size: 26px; margin: 0 0 14px; letter-spacing: .03em; }
+  .hero img, figure img { width: 100%; height: auto; display: block; border: 2px solid var(--rule); }
+  .hero figcaption, figure figcaption { font-size: 14px; color: var(--muted); margin-top: 6px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
+  .stat { background: var(--card); border: 2px solid var(--rule); padding: 14px; }
+  .num { font-size: 34px; line-height: 1; font-weight: 700; }
+  .stat p { margin: 6px 0 0; font-size: 14px; line-height: 1.35; color: var(--muted); }
+  .note { font-size: 14px; color: var(--muted); margin-top: 12px; }
+  ol.steps { padding-left: 22px; }
+  ol.steps li { margin-bottom: 10px; }
+  .timeline figure { margin: 0 0 28px; }
+  .tag { display: inline-block; background: var(--ink); color: var(--paper); font-size: 12px;
+         padding: 2px 8px; letter-spacing: .08em; margin-bottom: 6px; }
+  h3 { font-size: 19px; margin: 0 0 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--muted); vertical-align: top; }
+  th { font-family: "Oswald", sans-serif; text-transform: uppercase; font-weight: 600; letter-spacing: .04em; }
+  .tablewrap { overflow-x: auto; }
+  a { color: var(--red); }
+  footer { padding: 28px 0 48px; font-size: 14px; color: var(--muted); text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>Business Booms &amp; Depressions</h1>
+    <div class="bar" aria-hidden="true"></div>
+    <p class="sub">Since 1945 · How it was made</p>
+    <p class="lede">In 1944 a wall chart traced American business, prices and debt back to 1775. This one picks up where it stopped and carries it to 2025, built over a few weeks of conversation between one person and an AI.</p>
+    <nav>
+      <a href="output/chart_original_style.pdf">Hi-res PDF</a>
+      <a href="data/us_stats.xlsx">Data workbook</a>
+      <a href="chart_original_style.py">The code</a>
+      <a href="https://github.com/enricoronca/Business-Booms-Depressions-1945-2025#how-the-series-are-built">Sources &amp; methods</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <figure style="margin:0">
+      <img src="output/chart_preview.jpg" alt="The finished chart: business activity, commodity prices, federal debt, national income, the Dow Jones and bond yields from 1945 to 2025, with presidents, wars and cost-of-living pillars.">
+      <figcaption>The finished chart. Open the PDF to zoom into any year.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>By the numbers</h2>
+    <div class="stats">
+      <div class="stat"><div class="num">80</div><p>years covered, 1945 to 2025, continuing a chart that began in 1775</p></div>
+      <div class="stat"><div class="num">27</div><p>versions of the chart shown and revised, from the first log-scale draft to the print</p></div>
+      <div class="stat"><div class="num">50+</div><p>test renders in the last four days alone, to check that every label fit</p></div>
+      <div class="stat"><div class="num">4,071</div><p>values plotted on the chart, from about 10,000 numbers in the workbook</p></div>
+      <div class="stat"><div class="num">923</div><p>lines of Python in the final script</p></div>
+      <div class="stat"><div class="num">59</div><p>labels placed by the program so that none covers another: 24 booms and recessions, 28 values, 7 wars</p></div>
+      <div class="stat"><div class="num">20</div><p>cost-of-living pillars in four sets, from the 1965 dollar to the 2019 dollar</p></div>
+      <div class="stat"><div class="num">12,700+</div><p>words exchanged in the conversation, counting only the last four days</p></div>
+    </div>
+    <p class="note">The conversation ran over several sessions, and only the last one (12–16 November 2026) could be counted exactly; the word and render counts are for that session, so the true totals are higher.</p>
+  </section>
+
+  <section>
+    <h2>How it was made</h2>
+    <ol class="steps">
+      <li><strong>Reading the original.</strong> Photographs of the 1944 chart were studied up close: how its commodity areas were coloured, how its scales were hand-drawn to fit the grid, how its labels and pillars were laid out.</li>
+      <li><strong>Collecting the data.</strong> Monthly and annual series were gathered from FRED, the NBER and the Bureau of Labor Statistics into one Excel workbook, and every column was checked. That check found and fixed several problems, including three CPI columns whose headers did not match their data.</li>
+      <li><strong>Rebuilding the method.</strong> Business volume, for example, is not in any public table: it was rebuilt as the gap between industrial production and its own ten-year average, close to the way the original measured a deviation from "normal".</li>
+      <li><strong>Drawing it in code.</strong> Instead of a charting tool, a Python script draws every line, area, scale and label, so the chart can be redrawn exactly from the workbook at any size.</li>
+      <li><strong>Revising, version after version.</strong> Each change was asked for in plain words — "the axis labels should come out from the left", "the dashes are connecting" — then drawn, checked close up and adjusted.</li>
+    </ol>
+  </section>
+
+  <section class="timeline">
+    <h2>The chart as it developed</h2>
+
+    <figure>
+      <span class="tag">Stage 1</span>
+      <h3>First draft: logarithmic scales</h3>
+      <img src="history/01_log_axes.jpg" alt="First draft of the chart with logarithmic scales and ordinary axes on both sides." loading="lazy">
+      <figcaption>Correct data, but it looked like any modern chart: axes outside the frame, scales on a log grid.</figcaption>
+    </figure>
+
+    <figure>
+      <span class="tag">Stage 2</span>
+      <h3>Scales shaped by hand</h3>
+      <img src="history/03_custom_axes.jpg" alt="Draft with custom, hand-shaped scales." loading="lazy">
+      <figcaption>Like the original, each scale grows "however we want it to", so every line fills its own band of the chart.</figcaption>
+    </figure>
+
+    <figure>
+      <span class="tag">Stage 3</span>
+      <h3>The original's layout</h3>
+      <img src="history/04_original_layout.jpg" alt="Chart redrawn with the original's long proportions, scales inside the plot, presidents and years on top." loading="lazy">
+      <figcaption>Scales moved inside the plot on the grid lines, presidents and years on top, the long 9:1 frame of the 1944 print.</figcaption>
+    </figure>
+
+    <figure>
+      <span class="tag">Stage 4</span>
+      <h3>Inflation as a yearly change</h3>
+      <img src="history/05_twelve_month_change.jpg" alt="Chart with commodity prices shown as a 12-month percentage change." loading="lazy">
+      <figcaption>Since 1945 prices have hardly ever fallen, so a price-level line only climbs. Showing the yearly change brought back the rise and fall of the original.</figcaption>
+    </figure>
+
+    <figure>
+      <span class="tag">Stage 5</span>
+      <h3>One scale per line</h3>
+      <img src="history/06_one_scale_per_line.jpg" alt="Chart with one scale per line and more value labels." loading="lazy">
+      <figcaption>Fewer, clearer scales, and labels with values at turning points, so the reader does not have to go back to an axis.</figcaption>
+    </figure>
+
+    <figure>
+      <span class="tag">Stage 6</span>
+      <h3>Wars and pillars</h3>
+      <img src="history/07_war_bands.jpg" alt="Chart with shaded war bands and cost-of-living pillars." loading="lazy">
+      <figcaption>Wars shaded under the commodity area, as in the original, and white cost-of-living pillars standing inside the inflation areas.</figcaption>
+    </figure>
+
+    <figure>
+      <span class="tag">Stage 7</span>
+      <h3>Close-up details</h3>
+      <img src="history/08_label_polish.jpg" alt="Chart after detailed label and line adjustments." loading="lazy">
+      <figcaption>Labels whose background fits their text, small pointers instead of long arrows, and the peak of each inflation written into its area.</figcaption>
+    </figure>
+
+    <figure>
+      <span class="tag">Final</span>
+      <h3>The print</h3>
+      <img src="history/09_final.jpg" alt="The final chart." loading="lazy">
+      <figcaption>Dashes that stay readable where they cross the black area, corrected cost-of-living data, a balanced set of value labels, and this QR code.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>What is on the chart</h2>
+    <div class="tablewrap">
+    <table>
+      <tr><th>On the chart</th><th>What it shows</th><th>Source</th></tr>
+      <tr><td>Black area</td><td>Business volume: industrial production above or below its 10-year average</td><td>Federal Reserve (INDPRO)</td></tr>
+      <tr><td>Dashed line, green and red areas</td><td>Commodity prices: % change over 12 months; red above 10%</td><td>BLS (PPIACO)</td></tr>
+      <tr><td>Red line</td><td>Federal debt</td><td>U.S. Treasury</td></tr>
+      <tr><td>Green line</td><td>National income</td><td>Bureau of Economic Analysis</td></tr>
+      <tr><td>Chain line</td><td>Dow Jones Industrial Average</td><td>S&amp;P Dow Jones Indices</td></tr>
+      <tr><td>Dotted line</td><td>Long-term government bond yield (high yields plot low)</td><td>NBER; Federal Reserve (DGS10)</td></tr>
+      <tr><td>White pillars</td><td>What a base-year dollar bought at the end of each inflation</td><td>BLS consumer price indexes</td></tr>
+    </table>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    Continued from <em>Business Booms &amp; Depressions since 1775</em> (1944). Built in November 2026 with Claude (Anthropic).<br>
+    Data via the Federal Reserve Bank of St. Louis (FRED), NBER and BLS. Font: Oswald (SIL Open Font License).
+  </div>
+</footer>
+</body>
+</html>
