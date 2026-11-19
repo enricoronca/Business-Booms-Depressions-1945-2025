@@ -19,6 +19,7 @@ import glob, math, os, sys, textwrap
 import numpy as np
 import pandas as pd
 import matplotlib
+matplotlib.rcParams['pdf.fonttype'] = 42      # embed real TrueType fonts in the PDF (best for printers)
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.patheffects as pe
@@ -38,18 +39,46 @@ START, END = pd.Timestamp("1945-01-01"), pd.Timestamp("2026-01-01")
 # ---- page layout (inches).  FIG_W and FRAME_RATIO decide the shape of the chart itself.
 FIG_W = 40.0               # width of the whole page
 FRAME_RATIO = 6.5          # frame width : frame height (sketch: 8:1; the original is about 9.3:1; lower = taller)
-MARGIN_L, MARGIN_R = 0.025, 0.115   # fractions of FIG_W; the right margin holds the legend
-TITLE_IN = 0.8             # space above the frame for the title
-TEXT_BELOW_IN = 3.0        # empty space under the frame, for the text you will add
+PAGE_MARGIN_IN = 0.45      # white margin left and right of the outline (the legend sits in the right one)
+OUTLINE_GAP_IN = 0.07      # white gap between the chart and its outline (left, right, bottom; none at the top)
+OUTLINE_LW = 3.2           # thickness of the outline, points
+LEGEND_W_IN = 0.26         # legend column outside the outline, on the right
+MARGIN_L = MARGIN_R = (PAGE_MARGIN_IN + OUTLINE_GAP_IN) / FIG_W
+TITLE_IN = 0.35            # empty space above the frame
+TEXT_BELOW_IN = None       # height of the text strip: worked out from the text (or set a number of inches)
+
+# ---- text strip: the text itself is in TEXT_FILE (plain text: "# HEADING", paragraphs, **bold**, "@@ source", tables)
+TEXT_FILE = "chart_text.md"
+LEFT_BLOCK = "INFLATION–DEFLATION AREAS"   # this block flows over LEFT_COLS columns on the left; the others go right
+LEFT_COLS = 3
+TITLE = "BUSINESS BOOMS & DEPRESSIONS"
+YEARS_TEXT = "1945–2025"
+CENTRE_SHARE = 0.19        # share of the width for the title block in the middle (about as in the original)
+MAX_RIGHT_RATIO = 1.25     # no right-hand block wider than this times the average
+TABLE_GAP_IN = 0.18        # gap between the two halves of the debt table
+TITLE_WIDTH_SHARE = 0.85   # the title fills at most this share of the centre
+TITLE_MIN_PT = 30.0        # it may shrink to this so that the title group is no taller than the text
+COL_GAP_IN, BLOCK_GAP_IN = 0.22, 0.45
+TEXT_GAP_TOP_IN = 0.62     # gap between the chart and the text (the outline and the small print sit in it)
+TEXT_MARGIN_BOTTOM_IN = 0.35
+TEXT_PT = 5.6              # body text size on the 40-inch page (printed 1.5 m wide everything is about 1.48 times larger)
+TEXT_LEADING = 1.2
+HEAD_SCALE = 3.1           # block headings, relative to the body text
+STRIPE_RED, STRIPE_IN = "#D9534F", 0.055
+LEGEND_FS = 5.0
+TEXT_FONTS = dict(body="texgyrebonum-regular.ttf", bold="texgyrebonum-bold.ttf", italic="texgyrebonum-italic.ttf",
+                  heading="LibreFranklin-Bold.ttf", title="LibreFranklin-ExtraBold.ttf", since="Jost-MediumItalic.ttf")
 
 # ---- QR code + "how it was made" lines, under the chart in the middle (set QR_URL = None to leave them out)
 QR_URL = "https://enricoronca.github.io/Business-Booms-Depressions-1945-2025/"     # the "how it was made" page; the code is drawn as vector squares
-QR_SIZE_IN = 1.0           # width of the QR code on the page, in inches
+QR_SIZE_IN = 0.6           # width of the QR code on the page, in inches
 QR_LINES = ["CONTINUED 1945-2025 FROM THE 1944 ORIGINAL, BUILT WITH CLAUDE (ANTHROPIC), NOVEMBER 2026",
-            "27 VERSIONS  ·  4,071 PLOTTED VALUES  ·  923 LINES OF CODE",
+            "37 VERSIONS  ·  4,071 PLOTTED VALUES  ·  1,239 LINES OF CODE",
             "SCAN FOR THE DATA, THE CODE AND HOW IT WAS MADE"]
 PRES_FRAC, YEAR_FRAC = 0.072, 0.060 # height of the presidents row / year row, as a share of the frame
+BASE_LW = 1.1              # thickness of the two baselines (and of the axis name boxes that sit on one)
 NGRID = 12                 # number of horizontal grid rows in the plot
+PNG_DPI = 450              # PNG resolution on the 40-inch page (450 = about 300 dpi when printed 1.5 m wide)
 FONT_SCALE = 1.0           # multiply every font size
 
 # ---- commodity prices: PPIACO is already 1982 = 100 (workbook column O), plotted LINEAR
@@ -91,7 +120,7 @@ WAR_ALPHA = 0.75
 WAR_FS = 8.0               # size of the war names
 
 # ---- labels on the lines: "moments" (series, year).  debt / income values come from the workbook.
-MOMENTS = ([("debt", y) for y in (1946, 1960, 1981, 1995, 2009, 2017, 2025)] +
+MOMENTS = ([("debt", y) for y in (1947, 1960, 1981, 1995, 2009, 2017, 2025)] +
            [("income", y) for y in (1950, 1960, 1969, 1980, 1990, 2000, 2025)] +
            [("dow", y) for y in (1972.9, 1999.9, 2002.75, 2009.2, 2015.4, 2020.9)] + [("dow", 1987.76, "BLACK MONDAY CRASH")] +
            [("yield", y) for y in (1954.3, 1966.7, 1981.7, 2012.6, 2016.5, 2020.6, 2025.8)])
@@ -231,6 +260,205 @@ HALO = [pe.withStroke(linewidth=2.2, foreground=YELLOW)]       # thin yellow out
 frame_w_in = FIG_W * (1 - MARGIN_L - MARGIN_R)
 frame_h_in = frame_w_in / FRAME_RATIO
 plot_h_in = frame_h_in * (1 - PRES_FRAC - YEAR_FRAC)
+# ---- text strip: measured before the page is made, so that the page height follows the text
+def font_file(name):
+    for d in (os.path.join(HERE, "fonts"), HERE, os.path.join(os.getcwd(), "fonts"), os.getcwd()):
+        p_ = os.path.join(d, name)
+        if os.path.exists(p_):
+            return p_
+    print(f"font {name} not found: using a default font instead")
+    return None
+
+_fp_cache = {}
+def fprop(name, size):
+    key = (name, round(size, 3))
+    if key not in _fp_cache:
+        f = font_file(name)
+        _fp_cache[key] = fm.FontProperties(fname=f, size=size) if f else fm.FontProperties(family="serif", size=size)
+    return _fp_cache[key]
+
+F_BODY, F_BOLD, F_ITAL = TEXT_FONTS["body"], TEXT_FONTS["bold"], TEXT_FONTS["italic"]
+F_HEAD, F_TITLE, F_SINCE = TEXT_FONTS["heading"], TEXT_FONTS["title"], TEXT_FONTS["since"]
+_mfig = plt.figure(dpi=144)
+_tr = _mfig.canvas.get_renderer()
+_wcache = {}
+
+def text_w(s_, font, size):
+    """width of a string in inches"""
+    key = (s_, font, round(size, 3))
+    if key not in _wcache:
+        w, _, _ = _tr.get_text_width_height_descent(s_, fprop(font, size), ismath=False)
+        _wcache[key] = w / _mfig.dpi
+    return _wcache[key]
+
+def read_blocks(path):
+    """text file: "# HEADING", paragraphs, **bold**, "@@ source line", "| table | rows |" """
+    blocks_, cur = {}, None
+    for raw_ln in open(path, encoding="utf-8").read().split("\n\n"):
+        ln = raw_ln.strip()
+        if not ln:
+            continue
+        if ln.startswith("# "):
+            head, _, rest = ln.partition("\n")
+            cur = head[2:].strip()
+            blocks_[cur] = []
+            ln = rest.strip()
+            if not ln:
+                continue
+        if ln.startswith("|"):
+            blocks_[cur].append(("table", [[c.strip() for c in r.strip().strip("|").split("|")] for r in ln.split("\n")]))
+        elif ln.startswith("@@"):
+            blocks_[cur].append(("src", ln[2:].strip()))
+        else:
+            blocks_[cur].append(("p", " ".join(ln.split("\n"))))
+    return blocks_
+
+def words_of(text, base_font, bold_font):
+    out, bold = [], False
+    for k, part in enumerate(text.split("**")):
+        if k:
+            bold = not bold
+        for w in part.split():
+            out.append((w, bold_font if bold else base_font))
+    return out
+
+def layout(items, width, size):
+    """break paragraphs into lines for a column of `width` inches; returns line records"""
+    lh = size * TEXT_LEADING / 72
+    lines = []
+    for kind, content in items:
+        if kind == "table":
+            # as in the original: the rows are set in two side-by-side halves, the total at the foot of the right half
+            lines.append(dict(kind="gap", h=lh * 0.25))
+            head = content[0] if not content[0][0] else None
+            rows = content[1:] if head else content
+            total = [r for r in rows if "**" in r[0]]
+            data = [r for r in rows if "**" not in r[0]]
+            k = (len(data) + 1) // 2
+            left_rows, right_rows = data[:k], data[k:] + total
+            half = (width - TABLE_GAP_IN) / 2
+            def cell(r):
+                if r is None:
+                    return None
+                return dict(label=r[0].replace("**", ""), val=r[1].replace("**", "") if len(r) > 1 else "",
+                            font=F_BOLD if "**" in r[0] else F_BODY)
+            if head:
+                lines.append(dict(kind="row2", h=lh * 0.9, size=size * 0.82, half=half, head=head[1].replace("**", ""),
+                                  cells=(None, None)))
+            for i in range(max(len(left_rows), len(right_rows))):
+                lines.append(dict(kind="row2", h=lh * 0.98, size=size * 0.92, half=half, head=None,
+                                  cells=(cell(left_rows[i]) if i < len(left_rows) else None,
+                                         cell(right_rows[i]) if i < len(right_rows) else None)))
+            lines.append(dict(kind="gap", h=lh * 0.35))
+            continue
+        if kind == "src":
+            sz, fnt, fbold, indent, justify = size * 0.8, F_ITAL, F_ITAL, 0.0, False
+            lines.append(dict(kind="gap", h=lh * 0.2))
+        else:
+            sz, fnt, fbold, indent, justify = size, F_BODY, F_BOLD, size * 1.4 / 72, True
+        sp = text_w("a a", fnt, sz) - text_w("aa", fnt, sz)
+        cur, cur_w, first, avail = [], 0.0, True, width - indent
+        for w, f in words_of(content, fnt, fbold):
+            ww = text_w(w, f, sz)
+            need = ww if not cur else cur_w + sp + ww
+            if cur and need > avail:
+                lines.append(dict(kind="text", h=sz * TEXT_LEADING / 72, words=cur, size=sz, indent=indent if first else 0,
+                                  width=width, justify=justify))
+                first, cur, avail, need = False, [], width, ww
+            cur.append((w, f, ww))
+            cur_w = need
+        if cur:
+            lines.append(dict(kind="text", h=sz * TEXT_LEADING / 72, words=cur, size=sz, indent=indent if first else 0,
+                              width=width, justify=False))
+        if kind == "src":
+            lines.append(dict(kind="gap", h=lh * 0.15))
+    return lines
+
+def height(lines):
+    return sum(l["h"] for l in lines)
+
+def flow(lines, ncols, col_h):
+    cols, cur, hh = [], [], 0.0
+    for l in lines:
+        if hh + l["h"] > col_h + 1e-9 and cur:
+            cols.append(cur)
+            cur, hh = [], 0.0
+            if l["kind"] == "gap":
+                continue
+        cur.append(l)
+        hh += l["h"]
+    cols.append(cur)
+    return cols if len(cols) <= ncols else None
+
+def head_h(size):
+    return size * HEAD_SCALE * 1.5 / 72
+
+def fits(items, w, H, ncols):
+    ls_ = layout(items, w, TEXT_PT)
+    return height(ls_) <= H if ncols == 1 else flow(ls_, ncols, H) is not None
+
+def min_width(items, H, ncols, cap):
+    lo, hi = 0.6, cap
+    if not fits(items, hi, H, ncols):
+        return None
+    for _ in range(16):
+        mid = (lo + hi) / 2
+        lo, hi = (lo, mid) if fits(items, mid, H, ncols) else (mid, hi)
+    return hi
+
+blocks = read_blocks(os.path.join(HERE, TEXT_FILE) if not os.path.exists(TEXT_FILE) else TEXT_FILE)
+RIGHT = [h for h in blocks if h not in (LEFT_BLOCK, "SMALL PRINT")]
+OUT_L = PAGE_MARGIN_IN                              # outline, inches from the left of the page
+OUT_R = FIG_W - PAGE_MARGIN_IN
+TW = OUT_R - OUT_L
+# Widths as in the original: the title block gets CENTRE_SHARE of the width; the rest is shared between the blocks and
+# adjusted step by step until they all end at about the same depth.
+def block_h(name, w):
+    ls_ = layout(blocks[name], w, TEXT_PT)
+    if name != LEFT_BLOCK:
+        return height(ls_)
+    lo, hi = 0.2, 20.0                                   # smallest column height that takes the block in LEFT_COLS columns
+    for _ in range(18):
+        mid = (lo + hi) / 2
+        lo, hi = (lo, mid) if flow(ls_, LEFT_COLS, mid) is not None else (mid, hi)
+    return hi
+
+# The title block sits in the exact middle of the page, so the left block and the four right blocks get the same width.
+# The right blocks share their width so that they end at about the same depth.
+CENTRE_W = TW * CENTRE_SHARE
+side = (TW - CENTRE_W - 2 * BLOCK_GAP_IN) / 2
+COL_W_LEFT = (side - (LEFT_COLS - 1) * COL_GAP_IN) / LEFT_COLS
+r_room = side - (len(RIGHT) - 1) * COL_GAP_IN
+wr = np.full(len(RIGHT), r_room / len(RIGHT))
+for _ in range(40):
+    hs_r = np.array([block_h(nm, w) for nm, w in zip(RIGHT, wr)])
+    wr = wr * (hs_r / hs_r.mean()) ** 0.6
+    wr = np.minimum(wr, MAX_RIGHT_RATIO * r_room / len(RIGHT))
+    wr = wr * r_room / wr.sum()
+COL_WS = [float(w) for w in wr]
+hs = np.array([block_h(LEFT_BLOCK, COL_W_LEFT)] + [block_h(nm, w) for nm, w in zip(RIGHT, COL_WS)])
+TEXT_H = float(hs.max())
+# title block in the middle: title as large as fits its width, made smaller if the group would be taller than the text
+sp_paras = [c for _, c in blocks.get("SMALL PRINT", [])]      # each paragraph of the small print is one line
+sp_text = " ".join(sp_paras)
+def centre_stack(t_size):
+    t_w = text_w(TITLE, F_TITLE, t_size)
+    sp_l = []                                     # the small print now runs under the outline
+    qr_h = (QR_SIZE_IN + 0.08 + sum(TEXT_PT * (1.15 if i == 0 else 1.0) * 1.4 / 72 for i in range(len(QR_LINES)))) if QR_URL else 0
+    return 0.10 + t_size * 0.72 / 72 + 0.11 + 0.20 + qr_h, t_w, sp_l
+
+T_SIZE = 60.0
+while text_w(TITLE, F_TITLE, T_SIZE) > CENTRE_W * TITLE_WIDTH_SHARE and T_SIZE > 8:
+    T_SIZE -= 0.5
+while centre_stack(T_SIZE)[0] > head_h(TEXT_PT) + TEXT_H and T_SIZE > TITLE_MIN_PT:
+    T_SIZE -= 0.5
+STACK_H, T_W, SP_LINES = centre_stack(T_SIZE)
+STRIP_H = max(head_h(TEXT_PT) + TEXT_H, STACK_H)
+if TEXT_BELOW_IN is None:
+    TEXT_BELOW_IN = TEXT_GAP_TOP_IN + STRIP_H + TEXT_MARGIN_BOTTOM_IN
+print(f"TEXT: {TEXT_PT} pt, heights " + ", ".join(f"{h_:.2f}" for h_ in hs) + f" in, text height {TEXT_H:.2f} in, left columns {COL_W_LEFT:.2f} in, right columns "
+      + ", ".join(f"{w_:.2f}" for w_ in COL_WS) + f" in, centre {CENTRE_W:.2f} in, strip {TEXT_BELOW_IN:.2f} in")
+
 FIG_H = TITLE_IN + frame_h_in + TEXT_BELOW_IN
 YEAR_IN = frame_w_in / ((END - START).days / 365.25)             # inches per year on the page
 
@@ -302,7 +530,12 @@ base.set_xticks([]); base.set_yticks([])
 for sp in base.spines.values():
     sp.set_visible(False)
 fig.add_artist(Rectangle((fx0, y_frame_bottom), fw, h_plot + h_year + h_pres, transform=fig.transFigure,
-                         fill=False, ec="k", lw=2.2, zorder=50))
+                         fill=False, ec="k", lw=1.0, zorder=50))
+# outer outline: white gap left, right (around the legend) and bottom, none at the top
+_ft = y_frame_bottom + h_plot + h_year + h_pres
+fig.add_artist(Rectangle((OUT_L / FIG_W, y_frame_bottom - OUTLINE_GAP_IN / FIG_H), (OUT_R - OUT_L) / FIG_W,
+                         _ft - y_frame_bottom + OUTLINE_GAP_IN / FIG_H, transform=fig.transFigure,
+                         fill=False, ec="k", lw=OUTLINE_LW, zorder=50, joinstyle="miter"))
 
 # ---- presidents row (top)
 TERMS = [("Harry S.", "Truman", "Democrat", "1945-01-01", "1953-01-20"),
@@ -365,8 +598,8 @@ for r in range(0, NGRID + 1):
     base.axhline(r / NGRID, color="k", lw=0.4, alpha=0.55, zorder=1)
 zero_h = float(pos("business", [0])[0])
 base_h = float(pos("commodity", [0])[0])
-base.axhline(zero_h, color="k", lw=1.1, zorder=4.45)   # business-volume baseline drawn over the commodity area: the red stops exactly at it
-base.axhline(base_h, color="k", lw=1.1, zorder=1.2)
+base.axhline(zero_h, color="k", lw=BASE_LW, zorder=4.45)   # business-volume baseline drawn over the commodity area: the red stops exactly at it
+base.axhline(base_h, color="k", lw=BASE_LW, zorder=2.6)   # commodity baseline over the green/red/war areas, so it never shifts
 base.axvspan(pd.Timestamp(PROVISIONAL_FROM), END, color="grey", alpha=0.10, zorder=1)
 for _n, _w0, _w1, _f in WARS:
     base.axvspan(ts(_w0), ts(_w1), ymin=0, ymax=base_h, facecolor=WAR_COLOR, alpha=WAR_ALPHA, lw=0, zorder=1.6)
@@ -451,7 +684,8 @@ for c in scale_cols:
         continue
     bx0, bx1 = num(ts(c["x0"] - AXBOX_W_YEARS)), num(ts(c["x0"]))
     by0, bh = AXBOX_Y0_ROWS / NGRID, AXBOX_ROWS / NGRID
-    base.add_patch(Rectangle((bx0, by0), bx1 - bx0, bh, facecolor="white", edgecolor="k", lw=0.9, zorder=22))
+    base.add_patch(Rectangle((bx0, by0), bx1 - bx0, bh, facecolor="white", edgecolor="k", lw=BASE_LW, zorder=22,
+                           joinstyle="miter"))   # same weight as the baseline, so its top edge is the baseline
     # biggest font that fits inside the box (with a small margin)
     _rr = fig.canvas.get_renderer()
     bw_px = abs(base.transData.transform((bx1, 0))[0] - base.transData.transform((bx0, 0))[0])
@@ -839,7 +1073,7 @@ for _, i, j in red_spans():
     xa = yf(p_dates[k])
     if any(abs(xa - c) < 2.5 for c in pillar_centres) or any(r0 < xa < r1 for r0, r1 in reserved):
         continue                                   # that hump already has pillars (or a scale) on it
-    pk = f"(PEAK {float(yoy.iloc[k]):+.0f}%)"
+    pk = f"(PEAK {float(ppi_yoy.iloc[i:j + 1].max()):+.0f}%)"   # unsmoothed peak, as quoted in the text
     if place_inside_area(k, [f"PRICE\nINFLATION\nAREA\n{pk}", f"PRICE INFLATION\nAREA {pk}",
                              f"PRICE\nINFLATION\nPEAK\n{float(yoy.iloc[k]):+.0f}%"]):
         n_red += 1
@@ -870,34 +1104,111 @@ if skipped:
     print("No room for these labels (add space or remove them in the settings):", "; ".join(skipped))
 
 # =====================================================================
-# 6. TITLE, LEGEND, NOTES
+# 6. LEGEND, TEXT STRIP UNDER THE CHART (title, QR code, text blocks)
 # =====================================================================
-fig.text(0.5, 1 - 0.38 / FIG_H, "BUSINESS BOOMS & DEPRESSIONS", ha="center", va="center", fontsize=FS(30),
-         fontweight="bold", family=HEAD_FONT)
-fig.text(0.5, 1 - 0.68 / FIG_H, "SINCE 1945", ha="center", va="center", fontsize=FS(12), family=HEAD_FONT)
-handles = [
-    Line2D([], [], color=DEBT_C, lw=2.2, label="Federal Debt"),
-    Line2D([], [], color=INC_C, lw=2.2, label="National Income"),
-    Patch(color="black", label="Business Activity"),
-    Line2D([], [], color="k", ls=":", lw=1.6, label="Bonds (yield)"),
-    Line2D([], [], color="k", ls=(0, (6, 2, 1, 2)), lw=1.2, label="Stocks (Dow Jones)"),
-    Line2D([], [], color="k", ls=(0, (4, 2)), lw=1.1, label="Commodities"),
-    Patch(color=LGREEN, label="Commodity prices falling"),
-    Patch(color=DGREEN, label=f"Prices rising (up to {RED_YOY:.0f}% a year)"),
-    Patch(color=RED, label=f"Inflation (above {RED_YOY:.0f}% a year for {RED_MIN_MONTHS}+ months)"),
-    Patch(facecolor=WAR_COLOR, alpha=WAR_ALPHA, label="Wars (darker where two overlap)"),
-    Patch(facecolor="white", edgecolor="k", lw=0.7, label="CPI pillars: what the base-year\ndollar bought at the end year"),
-]
-fig.legend(handles=handles, loc="center left",
-           bbox_to_anchor=(fx0 + fw + 0.004, y_frame_bottom + (h_plot + h_year + h_pres) / 2),
-           ncol=1, frameon=False, labelspacing=0.55, prop={"family": HEAD_FONT, "size": FS(9)})
-fig.text(fx0, 0.2 / FIG_H,
-         f"Commodities: PPI all commodities (PPIACO), % change over the previous 12 months, {COMM_SMOOTH}-month average. Business activity: % deviation of "
-         "industrial production from its centred 10-year average (grey band: shortened window). Bond yield: NBER "
-         "long-term government yield to 1961, 10-year Treasury from 1962; month-end values. "
-         "Scales are hand-shaped. White strips hide the data beneath them. Debt and income plotted at mid-year.",
-         fontsize=FS(8), va="bottom", family=HEAD_FONT)
+# legend as in the original: six names, each written above a short sample of its line, between chart and outline
+LEGEND = [("Federal\nDebt", dict(color=DEBT_C, lw=1.6)), ("National\nIncome", dict(color=INC_C, lw=1.6)),
+          ("Business\nActivity", "area"), ("Bonds", dict(color="k", ls=":", lw=1.4)),
+          ("Stocks", dict(color="k", ls=(0, (6, 2, 1, 2)), lw=1.1)), ("Commodity\nPrices", dict(color="k", ls=(0, (4, 2)), lw=1.1))]
+lx0 = (OUT_R + 0.08) / FIG_W
+lx1 = (OUT_R + 0.08 + LEGEND_W_IN) / FIG_W
+ly_top, ly_bot = y_frame_bottom + h_plot * 0.93, y_frame_bottom + h_plot * 0.12
+for i, (name, st) in enumerate(LEGEND):
+    yy = ly_top - i * (ly_top - ly_bot) / (len(LEGEND) - 1)
+    fig.text((lx0 + lx1) / 2, yy, name, fontsize=FS(LEGEND_FS), family=HEAD_FONT, fontweight="bold", va="bottom", ha="center",
+             linespacing=1.0)
+    ys = yy - 0.05 / FIG_H
+    if st == "area":
+        fig.add_artist(Rectangle((lx0, ys - 0.04 / FIG_H), lx1 - lx0, 0.08 / FIG_H, transform=fig.transFigure,
+                                 facecolor="k", edgecolor="none"))
+    else:
+        fig.add_artist(Line2D([lx0, lx1], [ys, ys], transform=fig.transFigure, **st))
 
+def draw_lines(lines, x, y_top):
+    y = y_top
+    for l in lines:
+        y -= l["h"]
+        base_y = y + l["h"] * 0.22
+        if l["kind"] == "text":
+            ws = l["words"]
+            sp_nat = text_w("a a", ws[0][1], l["size"]) - text_w("aa", ws[0][1], l["size"])
+            total = sum(w for _, _, w in ws)
+            room = l["width"] - l["indent"]
+            gap = (room - total) / (len(ws) - 1) if (l["justify"] and len(ws) > 1) else sp_nat
+            xx = x + l["indent"]
+            for w, f, ww in ws:
+                fig.text(xx / FIG_W, base_y / FIG_H, w, fontproperties=fprop(f, l["size"]), va="baseline", ha="left")
+                xx += ww + gap
+        elif l["kind"] == "row2":
+            for j in range(2):
+                x_ = x + j * (l["half"] + TABLE_GAP_IN)
+                vx = x_ + l["half"]
+                if l["head"]:
+                    fig.text(vx / FIG_W, base_y / FIG_H, l["head"], fontproperties=fprop(F_BOLD, l["size"]),
+                             va="baseline", ha="right")
+                    continue
+                c = l["cells"][j]
+                if not c:
+                    continue
+                p_ = fprop(c["font"], l["size"])
+                fig.text(x_ / FIG_W, base_y / FIG_H, c["label"], fontproperties=p_, va="baseline")
+                fig.text(vx / FIG_W, base_y / FIG_H, c["val"], fontproperties=p_, va="baseline", ha="right")
+                lw_ = text_w(c["label"] + " ", c["font"], l["size"])
+                vw_ = text_w(" " + c["val"], c["font"], l["size"])
+                dw = text_w(" .", F_BODY, l["size"])
+                n = max(0, int((vx - x_ - lw_ - vw_) / dw))
+                fig.text((vx - vw_) / FIG_W, base_y / FIG_H, " ." * n, fontproperties=fprop(F_BODY, l["size"]),
+                         va="baseline", ha="right")
+    return y
+
+def heading(txt, x, y_top):
+    sz = TEXT_PT * HEAD_SCALE
+    fig.text(x / FIG_W, (y_top - sz * 1.0 / 72) / FIG_H, txt, fontproperties=fprop(F_HEAD, sz), va="baseline")
+    return y_top - head_h(TEXT_PT)
+
+strip_top = TEXT_BELOW_IN - TEXT_GAP_TOP_IN
+_sp_y = TEXT_BELOW_IN - OUTLINE_GAP_IN - 0.15     # small print: one line per paragraph between the outline and the text
+for _k, _para in enumerate(sp_paras):
+    fig.text(((OUT_L + OUT_R) / 2) / FIG_W, _sp_y / FIG_H, _para, ha="center", va="baseline",
+             fontproperties=fprop(F_BOLD if _k == len(sp_paras) - 1 and len(sp_paras) > 1 else F_ITAL, TEXT_PT * 0.85))
+    _sp_y -= TEXT_PT * 0.85 * 1.45 / 72
+strip_bot = strip_top - head_h(TEXT_PT) - TEXT_H
+xx = OUT_L
+y0 = heading(LEFT_BLOCK, xx, strip_top)
+for col in flow(layout(blocks[LEFT_BLOCK], COL_W_LEFT, TEXT_PT), LEFT_COLS, TEXT_H):
+    short = TEXT_H - height(col)                  # spread a small shortfall over the lines so all columns end level
+    if 0 < short < 3 * TEXT_PT * TEXT_LEADING / 72:
+        k_ = 1 + short / height(col)
+        col = [dict(l, h=l["h"] * k_) for l in col]
+    draw_lines(col, xx, y0)
+    xx += COL_W_LEFT + COL_GAP_IN
+centre_x0 = xx - COL_GAP_IN + BLOCK_GAP_IN
+centre_x1 = centre_x0 + CENTRE_W
+xx = centre_x1 + BLOCK_GAP_IN
+for h, w_ in zip(RIGHT, COL_WS):
+    draw_lines(layout(blocks[h], w_, TEXT_PT), xx, heading(h, xx, strip_top))
+    xx += w_ + COL_GAP_IN
+
+# ---- centre: red stripes, title, years, QR code, small print -- the whole group centred in the strip
+cw = centre_x1 - centre_x0
+cx = (centre_x0 + centre_x1) / 2
+t_size, t_w, sp_lines, stack = T_SIZE, T_W, SP_LINES, STACK_H
+yr_size = t_size * 0.42
+strip_bot = strip_top - STRIP_H
+y_s1 = (strip_top + strip_bot) / 2 + stack / 2
+y_title = y_s1 - 0.10 - t_size * 0.72 / 72
+y_s2 = y_title - 0.11
+stripe_x0, stripe_x1 = cx - t_w / 2 - 0.02, cx + t_w / 2 + 0.02
+fig.text(cx / FIG_W, y_title / FIG_H, TITLE, fontproperties=fprop(F_TITLE, t_size), ha="center", va="baseline")
+yr_w = text_w(YEARS_TEXT, F_SINCE, yr_size)
+stripe_lw = STRIPE_IN * 72
+fig.add_artist(Line2D([stripe_x0 / FIG_W, stripe_x1 / FIG_W], [y_s1 / FIG_H] * 2, color=STRIPE_RED, lw=stripe_lw,
+                      solid_capstyle="butt", transform=fig.transFigure))
+for a_, b_ in ((stripe_x0, cx - yr_w / 2 - 0.08), (cx + yr_w / 2 + 0.08, stripe_x1)):
+    fig.add_artist(Line2D([a_ / FIG_W, b_ / FIG_W], [y_s2 / FIG_H] * 2, color=STRIPE_RED, lw=stripe_lw,
+                          solid_capstyle="butt", transform=fig.transFigure))
+fig.text(cx / FIG_W, y_s2 / FIG_H, YEARS_TEXT, fontproperties=fprop(F_SINCE, yr_size), ha="center", va="center_baseline")
+y_next = y_s2 - 0.20
 if QR_URL:
     try:
         import qrcode
@@ -908,16 +1219,23 @@ if QR_URL:
     qr.make(fit=True)
     mat = np.array(qr.get_matrix(), dtype=bool)
     n = mat.shape[0]
-    q_top_in = TEXT_BELOW_IN - 0.25                         # 0.25 in under the frame
-    qax = fig.add_axes([0.5 - QR_SIZE_IN / 2 / FIG_W, (q_top_in - QR_SIZE_IN) / FIG_H, QR_SIZE_IN / FIG_W, QR_SIZE_IN / FIG_H])
+    qax = fig.add_axes([(cx - QR_SIZE_IN / 2) / FIG_W, (y_next - QR_SIZE_IN) / FIG_H, QR_SIZE_IN / FIG_W, QR_SIZE_IN / FIG_H])
     qax.set_xlim(0, n); qax.set_ylim(n, 0); qax.axis("off")
     for (r, c) in zip(*np.nonzero(mat)):
         qax.add_patch(Rectangle((c, r), 1, 1, facecolor="k", edgecolor="k", lw=0.15))
+    y_next -= QR_SIZE_IN + 0.08
     for i, ln in enumerate(QR_LINES):
-        fig.text(0.5, (q_top_in - QR_SIZE_IN - 0.14 - i * 0.15) / FIG_H, ln, ha="center", va="top",
-                 fontsize=FS(7.5 if i == 0 else 7), fontweight="bold" if i == 0 else "normal", family=HEAD_FONT)
+        sz = TEXT_PT * (1.15 if i == 0 else 1.0)
+        y_next -= sz * 1.4 / 72
+        fig.text(cx / FIG_W, y_next / FIG_H, ln, fontproperties=fprop(F_HEAD if i == 0 else F_BODY, sz),
+                 ha="center", va="baseline")
+y_next -= 0.10
+for l in sp_lines:
+    y_next -= l["h"]
+    fig.text(cx / FIG_W, (y_next + l["h"] * 0.22) / FIG_H, " ".join(w for w, _, _ in l["words"]),
+             fontproperties=fprop(F_ITAL, l["size"]), ha="center", va="baseline")
 
-fig.savefig(f"{OUT}.png", dpi=150)
-fig.savefig(f"{OUT}.pdf")
+fig.savefig(f"{OUT}.png", dpi=PNG_DPI)
+fig.savefig(f"{OUT}.pdf")                         # vector: sharp at any print size
 print(f"page {FIG_W:g} x {FIG_H:.1f} in, frame {frame_w_in:.1f} x {frame_h_in:.2f} in (ratio {frame_w_in / frame_h_in:.1f}:1)")
 print(f"saved {OUT}.png and {OUT}.pdf")

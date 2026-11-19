@@ -10,13 +10,15 @@ A continuation of the 1944 wall chart *Business Booms & Depressions since 1775*,
 
 | File | What it is |
 |---|---|
-| `chart_original_style.py` | The script that draws the whole chart from the workbook |
+| `chart_original_style.py` | The script that draws the whole chart, text strip and QR code from the workbook |
+| `chart_text.md` | The text printed under the chart (edit it and re-run the script) |
 | `us_stats_final.xlsx` | The master Excel workbook with every series and formula |
-| `chart_original_style.pdf` / `.png` | The finished chart, as PDF (vector, for printing) and PNG |
-| `chart_preview.jpg` | The chart without the space underneath, for the web page |
+| `chart_original_style.pdf` | The finished chart, vector PDF for printing (40 × 9.3 in page, printed about 1.5 m wide) |
+| `chart_original_style.png` | The same at 18,000 × 4,171 pixels |
+| `chart_preview.jpg` | A smaller copy for the web page |
 | `01_…09_*.jpg` | Snapshots of the chart as it developed |
-| `01_inflation_deflation_areas.md` | The first text block printed under the chart |
-| `Oswald-Bold.ttf`, `OFL.txt` | The font and its licence (SIL Open Font License) |
+| `*.ttf` | Fonts: Oswald (chart), Libre Franklin (headings, title), Jost (years), TeX Gyre Bonum (body text) |
+| `OFL.txt`, `LibreFranklin-OFL.txt`, `Jost-OFL.txt`, `GUST-FONT-LICENSE.txt` | The fonts' licences |
 | `index.html` | The "how it was made" page |
 
 ## Re-drawing the chart
@@ -46,4 +48,4 @@ Presidential terms are rounded to whole years so that the dividers sit on the ye
 
 - Original chart: *Business Booms & Depressions since 1775*, 1944, based on the chart of the National Association of Purchasing Agents. This repository continues its design for a personal print and is not affiliated with its publisher.
 - Data: U.S. Bureau of Labor Statistics, Bureau of Economic Analysis, Federal Reserve Board, U.S. Treasury, National Bureau of Economic Research, all via the Federal Reserve Bank of St. Louis (FRED) where available. Dow Jones Industrial Average © S&P Dow Jones Indices; values are used for the chart only.
-- Font: Oswald, © The Oswald Project Authors, SIL Open Font License 1.1.
+- Fonts: Oswald (© The Oswald Project Authors), Libre Franklin (© The Libre Franklin Project Authors) and Jost (© The Jost Project Authors), SIL Open Font License 1.1; TeX Gyre Bonum (© GUST e-foundry), GUST Font License.
